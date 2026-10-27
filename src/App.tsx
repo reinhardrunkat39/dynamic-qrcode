@@ -14,6 +14,7 @@ import {
   LogOut,
   Music,
   Paperclip,
+  Palette,
   Plus,
   QrCode,
   ShieldCheck,
@@ -23,11 +24,19 @@ import {
 } from 'lucide-react';
 
 type QrMode = 'link' | 'pdf' | 'image' | 'audio' | 'file';
-type SavedQr = { id: string; name: string; url: string; mode: QrMode; createdAt: string };
+type SavedQr = { id: string; name: string; url: string; mode: QrMode; color: string; createdAt: string };
 
 const STORAGE_KEY = 'clarity-qr-history';
 const SESSION_KEY = 'clarity-qr-session';
 const DEFAULT_URL = 'https://clarity.studio/welcome';
+const THEMES: { id: string; label: string; dark: string; preview: string }[] = [
+  { id: 'biru', label: 'Biru', dark: '#102f50', preview: '#1d63c8' },
+  { id: 'hitam', label: 'Hitam', dark: '#0a0a0a', preview: '#222222' },
+  { id: 'hijau', label: 'Hijau', dark: '#0d4d2b', preview: '#1b9e5a' },
+  { id: 'merah', label: 'Merah', dark: '#7a1220', preview: '#e23b4f' },
+  { id: 'emas', label: 'Emas', dark: '#7a5a08', preview: '#e0a82e' },
+  { id: 'ungu', label: 'Ungu', dark: '#3a1d6b', preview: '#7a4ed1' },
+];
 const QR_OPTIONS = {
   width: 720,
   margin: 2,
@@ -47,6 +56,7 @@ function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [mode, setMode] = useState<QrMode>('link');
+  const [color, setColor] = useState<string>('#102f50');
   const [name, setName] = useState('Website utama');
   const [url, setUrl] = useState(DEFAULT_URL);
   const [fileName, setFileName] = useState('');
@@ -69,7 +79,7 @@ function App() {
     void QRCode.toDataURL(DEFAULT_URL, QR_OPTIONS).then(setQrData);
   }, [isLoggedIn]);
 
-  async function generateQr(value: string = url) {
+  async function generateQr(value: string = url, dark = color) {
     const target = value.trim();
     if (!target) {
       setNotice('Isi dulu yang mau dibuat QR.');
@@ -79,7 +89,7 @@ function App() {
     setIsGenerating(true);
     setNotice('');
     try {
-      setQrData(await QRCode.toDataURL(target, QR_OPTIONS));
+      setQrData(await QRCode.toDataURL(target, { ...QR_OPTIONS, color: { dark, light: '#ffffff' } }));
     } catch {
       setNotice('Belum bisa dibuat QR. Coba periksa lagi.');
     } finally {
@@ -109,6 +119,7 @@ function App() {
       name: name.trim() || 'QR tanpa nama',
       url: url.trim(),
       mode,
+      color,
       createdAt: new Date().toISOString(),
     };
     setHistory((items) => [item, ...items].slice(0, 20));
@@ -157,10 +168,11 @@ function App() {
 
   function openSaved(item: SavedQr) {
     setMode(item.mode);
+    setColor(item.color);
     setName(item.name);
     setUrl(item.url);
     setFileName(item.mode === 'link' ? '' : item.name);
-    void generateQr(item.url);
+    void generateQr(item.url, item.color);
   }
 
   function logout() {
@@ -207,6 +219,8 @@ function App() {
           <div className="mode-tabs">
             {MODES.map((m) => <button key={m.id} className={`mode-tab ${mode === m.id ? 'mode-active' : ''}`} onClick={() => switchMode(m.id)}><m.icon size={15} /> {m.label}</button>)}
           </div>
+
+          <div className="theme-row"><p className="theme-label"><Palette size={13} /> Dpe warna QR</p><div className="theme-dots">{THEMES.map((t) => <button key={t.id} type="button" className={`theme-dot ${color === t.dark ? 'theme-dot-active' : ''}`} style={{ background: t.preview }} aria-label={t.label} title={t.label} onClick={() => { setColor(t.dark); setNotice(''); if (url.trim()) void generateQr(url, t.dark); }} />)}</div></div>
 
           {mode === 'link' ? (
             <form onSubmit={(event) => { event.preventDefault(); void generateQr(); }}>
