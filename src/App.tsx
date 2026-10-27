@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import {
   ArrowUpRight,
@@ -7,17 +7,23 @@ import {
   Copy,
   Download,
   Eye,
+  FileText,
+  Image as ImageIcon,
   Link2,
   LockKeyhole,
   LogOut,
+  Music,
+  Paperclip,
   Plus,
   QrCode,
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
 } from 'lucide-react';
 
-type SavedQr = { id: string; name: string; url: string; createdAt: string };
+type QrMode = 'link' | 'pdf' | 'image' | 'audio' | 'file';
+type SavedQr = { id: string; name: string; url: string; mode: QrMode; createdAt: string };
 
 const STORAGE_KEY = 'clarity-qr-history';
 const SESSION_KEY = 'clarity-qr-session';
@@ -28,13 +34,22 @@ const QR_OPTIONS = {
   color: { dark: '#102f50', light: '#ffffff' },
   errorCorrectionLevel: 'H' as const,
 };
+const MODES: { id: QrMode; label: string; icon: typeof Link2; accept: string }[] = [
+  { id: 'link', label: 'Link', icon: Link2, accept: '' },
+  { id: 'pdf', label: 'PDF', icon: FileText, accept: 'application/pdf' },
+  { id: 'image', label: 'Gambar', icon: ImageIcon, accept: 'image/*' },
+  { id: 'audio', label: 'Audio', icon: Music, accept: 'audio/*' },
+  { id: 'file', label: 'File', icon: Paperclip, accept: '*/*' },
+];
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem(SESSION_KEY) === 'true');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [mode, setMode] = useState<QrMode>('link');
   const [name, setName] = useState('Website utama');
   const [url, setUrl] = useState(DEFAULT_URL);
+  const [fileName, setFileName] = useState('');
   const [qrData, setQrData] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [notice, setNotice] = useState('');
@@ -57,7 +72,7 @@ function App() {
   async function generateQr(value: string = url) {
     const target = value.trim();
     if (!target) {
-      setNotice('Isi dulu link yang mau dibuat QR.');
+      setNotice('Isi dulu yang mau dibuat QR.');
       return;
     }
 
@@ -66,7 +81,7 @@ function App() {
     try {
       setQrData(await QRCode.toDataURL(target, QR_OPTIONS));
     } catch {
-      setNotice('Link belum bisa dibuat. Coba periksa lagi link-nya.');
+      setNotice('Belum bisa dibuat QR. Coba periksa lagi.');
     } finally {
       setIsGenerating(false);
     }
@@ -93,6 +108,7 @@ function App() {
       id: crypto.randomUUID(),
       name: name.trim() || 'QR tanpa nama',
       url: url.trim(),
+      mode,
       createdAt: new Date().toISOString(),
     };
     setHistory((items) => [item, ...items].slice(0, 20));
@@ -113,9 +129,37 @@ function App() {
     download.click();
   }
 
+  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    setFileName(file.name);
+    setName(file.name.replace(/\.[^.]+$/, ''));
+    setNotice('');
+    void generateQr(objectUrl);
+  }
+
+  function switchMode(next: QrMode) {
+    setMode(next);
+    setNotice('');
+    setFileName('');
+    if (next === 'link') {
+      setUrl(DEFAULT_URL);
+      setName('Website utama');
+      void generateQr(DEFAULT_URL);
+    } else {
+      setUrl('');
+      setName('');
+      setQrData('');
+    }
+  }
+
   function openSaved(item: SavedQr) {
+    setMode(item.mode);
     setName(item.name);
     setUrl(item.url);
+    setFileName(item.mode === 'link' ? '' : item.name);
     void generateQr(item.url);
   }
 
@@ -147,26 +191,49 @@ function App() {
     );
   }
 
+  const currentMode = MODES.find((m) => m.id === mode)!;
+
   return (
     <main className="app-shell">
       <div className="ambient ambient-one" /><div className="ambient ambient-two" />
       <header className="topbar"><Brand /><nav><span className="nav-active">Tes jo tu QR</span></nav><button className="logout-button" onClick={logout}><LogOut size={15} /> Keluar</button></header>
 
-      <section className="hero-copy"><div><p className="eyebrow"><Sparkles size={14} /> QR JEMBA</p><h1>Langsung jo<br /><em>tes QR.</em></h1></div><p className="hero-description">So bilang kalo nemau ribet co tes ni website ni dia, di jamin jemba.</p></section>
+      <section className="hero-copy"><div><p className="eyebrow"><Sparkles size={14} /> QR JEMBA</p><h1>Langsung jo<br /><em>tes QR.</em></h1></div><p className="hero-description">So bilang kalo nemau ribet co tes ni website ni dia, di jamin jemba. Bisa link, PDF, gambar, audio, jo file.</p></section>
 
       <section className="studio-grid">
         <div className="editor-card glass-panel">
-          <div className="section-heading"><div><p className="mini-label">DEPE TAMPA</p><h2>Taru dpe link disini</h2></div><span className="live-pill"><span /> LIVE</span></div>
-          <form onSubmit={(event) => { event.preventDefault(); void generateQr(); }}>
-            <label htmlFor="qr-name">Dpe Nama QR</label>
-            <input id="qr-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Misalnya: Menu restoran" />
-            <label htmlFor="qr-url">Isi sini dpe link</label>
-            <div className="url-input"><Link2 size={17} /><input id="qr-url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://website-anda.com" /></div>
-            <div className="input-hint"><span>Pake link lengkap eh so deng https://</span><span className="secure-link"><ShieldCheck size={13} /> Aman</span></div>
-            <button className="generate-button" type="submit" disabled={isGenerating}>{isGenerating ? 'Lagi bekeng QR...' : 'Bekeng jo'}</button>
-          </form>
+          <div className="section-heading"><div><p className="mini-label">DEPE TAMPA</p><h2>Taru dpe barang disini</h2></div><span className="live-pill"><span /> LIVE</span></div>
+
+          <div className="mode-tabs">
+            {MODES.map((m) => <button key={m.id} className={`mode-tab ${mode === m.id ? 'mode-active' : ''}`} onClick={() => switchMode(m.id)}><m.icon size={15} /> {m.label}</button>)}
+          </div>
+
+          {mode === 'link' ? (
+            <form onSubmit={(event) => { event.preventDefault(); void generateQr(); }}>
+              <label htmlFor="qr-name">Dpe Nama QR</label>
+              <input id="qr-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Misalnya: Menu restoran" />
+              <label htmlFor="qr-url">Isi sini dpe link</label>
+              <div className="url-input"><Link2 size={17} /><input id="qr-url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://website-anda.com" /></div>
+              <div className="input-hint"><span>Pake link lengkap eh so deng https://</span><span className="secure-link"><ShieldCheck size={13} /> Aman</span></div>
+              <button className="generate-button" type="submit" disabled={isGenerating}>{isGenerating ? 'Lagi bekeng QR...' : 'Bekeng jo'}</button>
+            </form>
+          ) : (
+            <form onSubmit={(event) => { event.preventDefault(); void generateQr(); }}>
+              <label htmlFor="qr-name">Dpe Nama QR</label>
+              <input id="qr-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Misalnya: Laporan keuangan" />
+              <label htmlFor="qr-file">Pili dpe {currentMode.label}</label>
+              <label className="file-drop" htmlFor="qr-file">
+                <Upload size={20} />
+                <span>{fileName || `Klik untuk pili ${currentMode.label.toLowerCase()}`}</span>
+                <input id="qr-file" type="file" accept={currentMode.accept} onChange={handleFile} hidden />
+              </label>
+              {fileName && <div className="input-hint"><span>So pili: {fileName}</span><span className="secure-link"><ShieldCheck size={13} /> Lokal</span></div>}
+              <button className="generate-button" type="submit" disabled={isGenerating || !url}>{isGenerating ? 'Lagi bekeng QR...' : 'Bekeng jo'}</button>
+            </form>
+          )}
+
           {notice && <p className="notice"><Check size={15} /> {notice}</p>}
-          <div className="editor-footer"><span><Clock3 size={14} /> So ta simpang otomatis dia</span><span>Apa itu database?</span></div>
+          <div className="editor-footer"><span><Clock3 size={14} /> So ta simpang otomatis dia</span><span>{mode === 'link' ? 'Apa itu database?' : 'QR jalan di perangkat ini'}</span></div>
         </div>
 
         <div className="preview-card">
@@ -177,7 +244,7 @@ function App() {
         </div>
       </section>
 
-      <section className="history-section"><div className="history-heading"><div><p className="mini-label">DISINI DPE DATA</p><h2>QR yang so ta simpang</h2></div><span>{history.length} / 20 item</span></div>{history.length === 0 ? <EmptyState /> : <div className="history-list">{history.map((item) => <div className="history-item" key={item.id}><div className="history-qr"><QrCode size={22} /></div><div className="history-info"><strong>{item.name}</strong><span>{item.url}</span></div><span className="history-date">{dateFormatter.format(new Date(item.createdAt))}</span><button className="view-button" onClick={() => openSaved(item)}><Eye size={16} /> Buka</button><button className="delete-button" onClick={() => setHistory((items) => items.filter((saved) => saved.id !== item.id))} aria-label={`Hapus ${item.name}`}><Trash2 size={16} /></button></div>)}</div>}</section>
+      <section className="history-section"><div className="history-heading"><div><p className="mini-label">DISINI DPE DATA</p><h2>QR yang so ta simpang</h2></div><span>{history.length} / 20 item</span></div>{history.length === 0 ? <EmptyState /> : <div className="history-list">{history.map((item) => { const ModeIcon = MODES.find((m) => m.id === item.mode)?.icon ?? QrCode; return <div className="history-item" key={item.id}><div className="history-qr"><ModeIcon size={20} /></div><div className="history-info"><strong>{item.name}</strong><span>{item.url}</span></div><span className="history-date">{dateFormatter.format(new Date(item.createdAt))}</span><button className="view-button" onClick={() => openSaved(item)}><Eye size={16} /> Buka</button><button className="delete-button" onClick={() => setHistory((items) => items.filter((saved) => saved.id !== item.id))} aria-label={`Hapus ${item.name}`}><Trash2 size={16} /></button></div>; })}</div>}</section>
       <footer><span>BY GIVEN <b>·</b> QR ND RIBET</span><span>Semua dpe data ta simpang di link ini</span></footer>
       {copied && <div className="toast"><Check size={15} /> Link so ta salin</div>}
     </main>
