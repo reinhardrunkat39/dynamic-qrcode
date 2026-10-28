@@ -1,0 +1,2 @@
+[functions.ytdl]
+verify_jwt = false
