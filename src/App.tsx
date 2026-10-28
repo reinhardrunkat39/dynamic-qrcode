@@ -10,6 +10,7 @@ import {
   FileText,
   Image as ImageIcon,
   Link2,
+  Loader2,
   LockKeyhole,
   LogOut,
   Music,
@@ -22,6 +23,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 type QrMode = 'link' | 'pdf' | 'image' | 'audio' | 'file';
 type SavedQr = { id: string; name: string; url: string; mode: QrMode; color: string; createdAt: string };
@@ -61,6 +63,7 @@ function App() {
   const [url, setUrl] = useState(DEFAULT_URL);
   const [fileName, setFileName] = useState('');
   const [qrData, setQrData] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [notice, setNotice] = useState('');
   const [copied, setCopied] = useState(false);
@@ -140,15 +143,28 @@ function App() {
     download.click();
   }
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const objectUrl = URL.createObjectURL(file);
-    setUrl(objectUrl);
-    setFileName(file.name);
-    setName(file.name.replace(/\.[^.]+$/, ''));
-    setNotice('');
-    void generateQr(objectUrl);
+    setIsUploading(true);
+    setNotice('Lagi upload dpe file, tunggu bentar...');
+    try {
+      const ext = file.name.split('.').pop() || 'bin';
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage.from('qr-files').upload(path, file, { cacheControl: '3600', upsert: false });
+      if (error) throw error;
+      const { data: publicData } = supabase.storage.from('qr-files').getPublicUrl(path);
+      const publicUrl = publicData.publicUrl;
+      setUrl(publicUrl);
+      setFileName(file.name);
+      setName(file.name.replace(/\.[^.]+$/, ''));
+      setNotice('File so ta upload, QR so deng link yang bisa di-scan.');
+      await generateQr(publicUrl);
+    } catch {
+      setNotice('Upload kagal. Coba lagi bae.');
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   function switchMode(next: QrMode) {
@@ -238,16 +254,16 @@ function App() {
               <label htmlFor="qr-file">Pili dpe {currentMode.label}</label>
               <label className="file-drop" htmlFor="qr-file">
                 <Upload size={20} />
-                <span>{fileName || `Klik untuk pili ${currentMode.label.toLowerCase()}`}</span>
-                <input id="qr-file" type="file" accept={currentMode.accept} onChange={handleFile} hidden />
+                <span>{isUploading ? 'Lagi upload...' : fileName || `Klik untuk pili ${currentMode.label.toLowerCase()}`}</span>
+                <input id="qr-file" type="file" accept={currentMode.accept} onChange={handleFile} hidden disabled={isUploading} />
               </label>
-              {fileName && <div className="input-hint"><span>So pili: {fileName}</span><span className="secure-link"><ShieldCheck size={13} /> Lokal</span></div>}
-              <button className="generate-button" type="submit" disabled={isGenerating || !url}>{isGenerating ? 'Lagi bekeng QR...' : 'Bekeng jo'}</button>
+              {fileName && <div className="input-hint"><span>So pili: {fileName}</span><span className="secure-link"><ShieldCheck size={13} /> Online</span></div>}
+              <button className="generate-button" type="submit" disabled={isGenerating || isUploading || !url}>{isUploading ? 'Lagi upload...' : isGenerating ? 'Lagi bekeng QR...' : 'Bekeng jo'}{isUploading && <Loader2 size={16} className="spin" />}</button>
             </form>
           )}
 
           {notice && <p className="notice"><Check size={15} /> {notice}</p>}
-          <div className="editor-footer"><span><Clock3 size={14} /> So ta simpang otomatis dia</span><span>{mode === 'link' ? 'Apa itu database?' : 'QR jalan di perangkat ini'}</span></div>
+          <div className="editor-footer"><span><Clock3 size={14} /> So ta simpang otomatis dia</span><span>{mode === 'link' ? 'Apa itu database?' : 'File ta upload online'}</span></div>
         </div>
 
         <div className="preview-card">
